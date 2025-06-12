@@ -1,0 +1,77 @@
+{
+    "resourceType": "Encounter",
+    "id": "2EED1FD1-2133-11F0-AC28-0671E352DA21",
+    "meta": {
+        "profile": [
+            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-encounter"
+        ],
+        "lastUpdated": "2025-04-24T17:40:17Z",
+        "versionId": "1",
+        "tag": [
+            {
+                "system": "urn:uuid:4add7cea-2120-11f0-ac28-0671e352da21",
+                "code": "67cb9b51-d53c-dc02-b48c-7957fc94d994"
+            }
+        ]
+    },
+    "identifier": [
+        {
+            "use": "official",
+            "system": "https://github.com/synthetichealth/synthea",
+            "value": "67cb9b51-d53c-dc02-b48c-7957fc94d994"
+        }
+    ],
+    "status": "finished",
+    "type": [
+        {
+            "coding": [
+                {
+                    "system": "http://snomed.info/sct",
+                    "code": "410620009",
+                    "display": "Well child visit (procedure)"
+                }
+            ],
+            "text": "Well child visit (procedure)"
+        }
+    ],
+    "subject": {
+        "reference": "Patient/2EED1D72-2133-11F0-AC28-0671E352DA21",
+        "display": "Mr. Ronnie7 Bernier607"
+    },
+    "participant": [
+        {
+            "type": [
+                {
+                    "coding": [
+                        {
+                            "system": "http://terminology.hl7.org/CodeSystem/v3-ParticipationType",
+                            "code": "PPRF",
+                            "display": "primary performer"
+                        }
+                    ],
+                    "text": "primary performer"
+                }
+            ],
+            "period": {
+                "start": "2006-10-24T05:55:42+04:00",
+                "end": "2006-10-24T06:10:42+04:00"
+            }
+        }
+    ],
+    "period": {
+        "start": "2006-10-24T05:55:42+04:00",
+        "end": "2006-10-24T06:10:42+04:00"
+    },
+    "location": [
+        {
+            "location": {
+                "reference": "Location/2FAC6634-2133-11F0-AC28-0671E352DA21",
+                "display": "MEASURED WELLNESS LLC"
+            }
+        }
+    ],
+    "serviceProvider": {
+        "reference": "Organization/2FAC6805-2133-11F0-AC28-0671E352DA21",
+        "display": "MEASURED WELLNESS LLC"
+    }
+}
