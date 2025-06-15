@@ -1,4 +1,8 @@
 .venv/
 .vscode/
 
-bulk/notebook/demoSettings.py
+demoSettings.py
+secrets.toml
+__pycache__
+
+bulk/devices/edit.py

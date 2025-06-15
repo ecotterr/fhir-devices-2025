@@ -1,5 +1,11 @@
 pandas
 matplotlib
+seaborn
 requests
+faker
 
 fhir.resources
+
+streamlit
+numpy
+Authlib>=1.3.2
