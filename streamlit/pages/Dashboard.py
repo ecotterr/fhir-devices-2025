@@ -1,160 +1,35 @@
 import streamlit as st
 import pandas as pd
-import requests
-import base64
-import time
 from datetime import datetime
-import csv
-import re
 
 import demoSettings
-# from util.demoGetters import get_devices, get_observations, get_patients, get_valid_access_token
+import Utils as Utils
 
 FHIR_BASE_URL = demoSettings.base_url
 MAPPINGS_PATH = demoSettings.mappings_path
 
 DEBUG_BASIC_AUTH = True
 
-def get_valid_access_token():
-    from Home import refresh_access_token
-    expiry = st.session_state.get("token_expiry")
-    if expiry and time.time() > expiry:
-        return refresh_access_token()
-    return st.session_state.get("access_token")
-
-# Adding basic auth options for testing without OAuth flows. Always use OAuth in prod.
-if DEBUG_BASIC_AUTH:
-    user_pass = "SuperUser:irisowner"
-    basic_auth = base64.b64encode(user_pass.encode()).decode()
-    headers = {
-        "Authorization": f"Basic {basic_auth}",
-        "Accept": "application/fhir+json"
-    }
-else:
-    ACCESS_TOKEN = get_valid_access_token()
-    headers = {
-        "Authorization": f"Bearer {ACCESS_TOKEN}",
-        "Accept": "application/fhir+json"
-    }
-
-def load_resource_ids():
-    resource_ids = {}
-    with open(MAPPINGS_PATH, newline='') as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            resource_type = row['resource_type']
-            resource_id = row['resource_id']
-            resource_ids.setdefault(resource_type, []).append(resource_id)
-    return resource_ids
-
-RESOURCE_IDS = load_resource_ids()
-
-def get_patients():
-    patient_ids = RESOURCE_IDS.get("Patient", [])
-    unique_patient_ids = []
-    seen = set()
-    for pid in patient_ids:
-        if pid not in seen:
-            unique_patient_ids.append(pid)
-            seen.add(pid)
-        if len(unique_patient_ids) == 15:
-            break
-    patients = []
-    for pid in unique_patient_ids:
-        url = f"{FHIR_BASE_URL}/Patient/{pid}"
-        res = requests.get(url, headers=headers)
-        if res.status_code == 200:
-            patients.append(res.json())
-        else:
-            st.warning(f"Failed to fetch Patient/{pid}: {res.status_code}")
-    return patients
-
-def get_devices(pid):
-    url = f"{FHIR_BASE_URL}/Device?patient=Patient/{pid}"
-    res = requests.get(url, headers=headers)
-    devices = []
-    if res.status_code == 200:
-        bundle = res.json()
-        # Extract the "resource" from each entry in the bundle
-        for entry in bundle.get("entry", []):
-            resource = entry.get("resource")
-            if resource:
-                devices.append(resource)
-    else:
-        st.warning(f"Failed to fetch Devices for Patient/{pid}: {res.status_code}")
-    return devices
-
-def get_observations(pid):
-    url = f"{FHIR_BASE_URL}/Observation?subject=Patient/{pid}"
-    res = requests.get(url, headers=headers)
-    observations = []
-    if res.status_code == 200:
-        bundle = res.json()
-        # Extract the "resource" from each entry in the bundle
-        for entry in bundle.get("entry", []):
-            resource = entry.get("resource")
-            if resource:
-                observations.append(resource)
-    else:
-        st.warning(f"Failed to fetch Observations for Patient/{pid}: {res.status_code}")
-    return observations
-
-##
 st.title("Device Dashboard")
 
-def get_patient_display_name(patient):
-    # Try to use the first name entry
-    names = patient.get("name", [])
-    if names:
-        name = names[0]
-        # Prefer 'text' if present
-        if "text" in name:
-            return name["text"]
-        # Otherwise, build from given/family
-        given = name.get("given", [])[0]
-        family = name.get("family", "")
-        full_name = re.sub(r'\d+', '', f"{given} {family}").strip()
-        if full_name:
-            return full_name
-    # Fallback to ID
-    return patient.get("id", "Unknown")
-
 ## Sidebar for patient selection
-patients = get_patients()
-patient_options = [
-    {"id": p.get("id"), "name": get_patient_display_name(p)}
-    for p in patients
-]
-patient_dict = {p["name"]: p["id"] for p in patient_options}
-selected_name = st.sidebar.selectbox("Select Patient", list(patient_dict.keys()))
-patient_id = patient_dict[selected_name]
+patient_id, selected_name = Utils.render_sidebar_patient_select()
 
-observations = get_observations(patient_id)
-devices = get_devices(patient_id)
+observations = Utils.get_observations(patient_id)
+devices = Utils.get_devices(patient_id)
 
 ## get Devices for Patient
 st.header(f"Devices for {selected_name}")
-devices = get_devices(patient_id)
 if devices:
     for entry in devices:
         d = entry
-        st.write(f"🔹 {d.get('type', {}).get('text', 'Device')} — ID: `{d['id']}`")
+        st.write(f"* {d.get('type', {}).get('text', 'Device')} — ID: `{d['id']}`")
 else:
     st.info("No devices found for this patient.")
 
 ## get Observations for Devices
 st.header("Observations")
-observations = get_observations(patient_id)
-
-# Extract available observation types
-obs_types = sorted(
-    set(
-        obs.get("code", {}).get("text") or
-        obs.get("code", {}).get("coding", [{}])[0].get("display", "")
-        for obs in observations
-    )
-)
-selected_types = st.sidebar.multiselect("Observation Types", obs_types, default=obs_types)
+selected_types = Utils.render_sidebar_observations_select(patient_id)
 
 # Date range filter
 dates = [
@@ -219,7 +94,7 @@ if not df.empty:
 
     # Time series plot for selected type
     st.markdown("### Time Series")
-    selected_chart_type = st.selectbox("Chart Observation Type", obs_types)
+    selected_chart_type = st.selectbox("Chart Observation Type", selected_types)
     chart_df = df[df["Type"] == selected_chart_type]
     if not chart_df.empty:
         chart_df["Timestamp"] = pd.to_datetime(chart_df["Timestamp"])
@@ -228,7 +103,7 @@ if not df.empty:
 
     # Distribution plot
     st.markdown("### Value Distribution")
-    selected_dist_type = st.selectbox("Distribution Observation Type", obs_types, key="dist")
+    selected_dist_type = st.selectbox("Distribution Observation Type", selected_types, key="dist")
     dist_df = df[df["Type"] == selected_dist_type]
     if not dist_df.empty:
         fig, ax = plt.subplots()
@@ -249,14 +124,4 @@ else:
 with st.sidebar.expander("Analytics Info"):
     st.write("Use the filters above to explore patient data, visualize trends, and download results.")
 
-st.sidebar.markdown("---")
-st.sidebar.markdown("InterSystems Ready 2025")
-st.sidebar.markdown(
-    """
-    <a href="https://github.com/ecotterr/fhir-devices-2025" target="_blank">
-        <img src="https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png" width="32" style="vertical-align:middle; margin-right:8px;">
-        <span style="font-size:1.1em; vertical-align:middle;">github.com/ecotterr</span>
-    </a>
-    """,
-    unsafe_allow_html=True
-)
+Utils.render_sidebar_bottom()
