@@ -3,6 +3,7 @@ matplotlib
 seaborn
 requests
 faker
+openai
 
 fhir.resources
 

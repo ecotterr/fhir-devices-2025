@@ -6,3 +6,7 @@ secrets.toml
 __pycache__
 
 bulk/devices/edit.py
+*logger*
+sample*.json
+
+JWTOAuthClient

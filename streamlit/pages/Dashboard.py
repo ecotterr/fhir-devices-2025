@@ -2,11 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-import demoSettings
-import Utils as Utils
-
-FHIR_BASE_URL = demoSettings.base_url
-MAPPINGS_PATH = demoSettings.mappings_path
+import Utils as Utils # See root/streamlit/Utils.py for shared methods
 
 DEBUG_BASIC_AUTH = True
 
@@ -15,11 +11,17 @@ st.title("Device Dashboard")
 ## Sidebar for patient selection
 patient_id, selected_name = Utils.render_sidebar_patient_select()
 
+# based on selection, get associated devices and observations
 observations = Utils.get_observations(patient_id)
 devices = Utils.get_devices(patient_id)
 
-## get Devices for Patient
-st.header(f"Devices for {selected_name}")
+col1, col2 = st.columns([6, 1])
+with col1:
+    st.subheader(f"Devices for {selected_name}")
+with col2:
+    if st.button("Refresh", key="RefreshDevices"):
+        Utils.get_devices.clear()  # Clear the cache for get_devices
+        devices = Utils.get_devices(patient_id)
 if devices:
     for entry in devices:
         d = entry
@@ -28,7 +30,14 @@ else:
     st.info("No devices found for this patient.")
 
 ## get Observations for Devices
-st.header("Observations")
+col3, col4 = st.columns([6, 1])
+with col3:
+    st.subheader(f"Observations")
+with col4:
+    if st.button("Refresh", key="RefreshObservations"):
+        Utils.get_observations.clear()  # Clear the cache for get_devices
+        devices = Utils.get_observations(patient_id)
+
 selected_types = Utils.render_sidebar_observations_select(patient_id)
 
 # Date range filter
@@ -48,7 +57,8 @@ if observations:
         value = obs.get("valueQuantity", {}).get("value")
         unit = obs.get("valueQuantity", {}).get("unit")
         effective = obs.get("effectiveDateTime")
-
+        device_ref = obs.get("device", {}).get("reference", "")
+        device_id = device_ref.split("/")[-1] if device_ref else ""
         coding_list = obs.get("code", {}).get("coding", [])
         obs_type = coding_list[0].get("display") if coding_list else None
         obs_code = coding_list[0].get("code") if coding_list else None
@@ -61,9 +71,10 @@ if observations:
                 "Unit": unit,
                 "Timestamp": effective[:10] + '   ' + effective[11:19],
                 "Type": obs_type,
-                "Code": obs_code
+                "Code": obs_code,
+                "Device": device_id
             })
-    df = pd.DataFrame(data, columns=["Value", "Unit", "Timestamp", "Type", "Code"])
+    df = pd.DataFrame(data, columns=["Value", "Unit", "Timestamp", "Type", "Code", "Device"])
     st.dataframe(
         df.sort_values("Timestamp", ascending=False),
         use_container_width=True

@@ -1,9 +1,9 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
-import os
 from authlib.integrations.requests_client import OAuth2Session
 from urllib.parse import urlencode, urlparse, parse_qs
+
+import Utils
 
 import demoSettings
 
@@ -26,7 +26,6 @@ def get_authorize_url():
     }
     if AUTH0_AUDIENCE:
         params["audience"] = AUTH0_AUDIENCE
-    st.write(params)
     return f"{AUTH0_AUTHORIZE_URL}?{urlencode(params)}"
 
 def get_token(code):
@@ -39,7 +38,6 @@ def get_token(code):
         grant_type="authorization_code",
         client_secret=AUTH0_CLIENT_SECRET,
     )
-    st.write(token)
     return token
 
 def get_user_info(token):
@@ -66,11 +64,7 @@ def refresh_access_token():
         st.session_state["token_expiry"] = time.time() + token["expires_in"]
     return token["access_token"]
 
-# --- Streamlit UI ---
 st.title('Device Management Application')
-if "user" in st.session_state and st.sidebar.button("Force Log Out / Reset Login"):
-    st.session_state.clear()
-    st.rerun()
 
 query_params = st.query_params 
 
@@ -96,8 +90,33 @@ if "code" in query_params:
 elif "user" in st.session_state:
     user_info = st.session_state["user"]
     st.write(f"Hello, {user_info['name']}!")
-    if st.button("Log out"):
-        st.session_state.clear()
-        st.rerun()
 else:
     st.markdown(f'<a href="{get_authorize_url()}" target="_self"><button>Log in to continue</button></a>', unsafe_allow_html=True)
+    st.sidebar.markdown("Log in to view authorized patients")
+    st.sidebar.markdown(f'<a href="{get_authorize_url()}" target="_self"><button>Log in to continue</button></a>', unsafe_allow_html=True)
+
+if "user" in st.session_state:
+    # Reveal the Patient dropdown (should be empty for unauthenticated user!)
+    patient_id, selected_name = Utils.render_sidebar_patient_select()
+    # Show total metrics
+    st.markdown("## Metrics")
+    all_devices = Utils.get_total_devices()
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric(label="Total Patients", value=len(Utils.get_unique_patients()))
+    with col2:
+        st.metric(label="Total Devices", value=len(all_devices))
+    
+    st.markdown("## Devices")
+    device_types = []
+    for device in all_devices:
+        codings = device.get("type", {}).get("coding", [])
+        for coding in codings:
+            display = coding.get("display", "Unknown")
+            code = coding.get("code", "Unknown")
+            device_types.append((display, code))
+    df = pd.DataFrame(device_types, columns=["Device Type", "Device Code"])
+    count_df = df.value_counts().reset_index(name="Count")
+    st.table(count_df)
+
+Utils.render_sidebar_bottom()

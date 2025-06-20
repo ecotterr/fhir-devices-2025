@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 import time
 import base64
+import json
 import csv
 import re
 
@@ -46,7 +47,21 @@ def load_resource_ids():
             resource_ids.setdefault(resource_type, []).append(resource_id)
     return resource_ids
 
-def get_patients(max = 15):
+@st.cache_data
+def get_patients(max = 150):
+    unique_patient_ids = get_unique_patients(max)
+    patients = []
+    for pid in unique_patient_ids:
+        url = f"{FHIR_BASE_URL}/Patient/{pid}"
+        res = requests.get(url, headers=auth_headers())
+        if res.status_code == 200:
+            patients.append(res.json())
+        else:
+            st.warning(f"Failed to fetch Patient/{pid}: {res.status_code}")
+    return patients
+
+@st.cache_data
+def get_unique_patients(max = 150):
     resource_ids = load_resource_ids() # streamlit cache should pull the same id list into context without reading CSV
     patient_ids = resource_ids.get("Patient", [])[:max]
     unique_patient_ids = []
@@ -57,15 +72,7 @@ def get_patients(max = 15):
             seen.add(pid)
         if len(unique_patient_ids) == max:
             break
-    patients = []
-    for pid in unique_patient_ids:
-        url = f"{FHIR_BASE_URL}/Patient/{pid}"
-        res = requests.get(url, headers=auth_headers())
-        if res.status_code == 200:
-            patients.append(res.json())
-        else:
-            st.warning(f"Failed to fetch Patient/{pid}: {res.status_code}")
-    return patients
+    return unique_patient_ids
 
 def get_patient_display_name(patient):
     # Try to use the first name entry
@@ -84,6 +91,7 @@ def get_patient_display_name(patient):
     # Fallback to ID
     return patient.get("id", "Unknown")
 
+@st.cache_data
 def get_devices(pid):
     url = f"{FHIR_BASE_URL}/Device?patient=Patient/{pid}"
     res = requests.get(url, headers=auth_headers())
@@ -99,6 +107,16 @@ def get_devices(pid):
         st.warning(f"Failed to fetch Devices for Patient/{pid}: {res.status_code}")
     return devices
 
+@st.cache_data
+def get_total_devices():
+    unique_patient_ids = get_unique_patients()
+    total_devices = []
+    for pid in unique_patient_ids:
+        devices = get_devices(pid)
+        total_devices += devices
+    return total_devices
+
+@st.cache_data
 def get_observations(pid):
     url = f"{FHIR_BASE_URL}/Observation?subject=Patient/{pid}"
     res = requests.get(url, headers=auth_headers())
@@ -113,6 +131,23 @@ def get_observations(pid):
     else:
         st.warning(f"Failed to fetch Observations for Patient/{pid}: {res.status_code}")
     return observations
+
+@st.cache_data
+def get_patient_everything(pid):
+    
+    url = f"{FHIR_BASE_URL}/Patient/{pid}/$everything"
+    res = requests.get(url, headers=auth_headers())
+    bundle_contents = []
+    if res.status_code == 200:
+        bundle = res.json()
+        # Extract the "resource" from each entry in the bundle
+        for entry in bundle.get("entry", []):
+            resource = entry.get("resource")
+            if resource:
+                bundle_contents.append(resource)
+    else:
+        st.warning(f"Failed to fetch Patient/{pid}/$everything: {res.status_code}")
+    return bundle_contents
 
 def render_sidebar_patient_select():
     ## Sidebar for patient selection
@@ -149,3 +184,89 @@ def render_sidebar_bottom():
     </a>
     """,
     unsafe_allow_html=True)
+    st.sidebar.markdown("---")
+    if "user" in st.session_state and st.sidebar.button("Force Log Out / Reset Login"):
+        st.session_state.clear()
+        st.rerun()
+
+@st.cache_data
+def get_tools():
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "get_observations",
+                "description": "Get clinical observations for a patient by ID.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "pid": {
+                            "type": "string",
+                            "description": "The patient's FHIR ID"
+                        }
+                    },
+                    "required": ["pid"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "get_devices",
+                "description": "Get devices associated with a patient by ID.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "pid": {
+                            "type": "string",
+                            "description": "The patient's FHIR ID"
+                        }
+                    },
+                    "required": ["pid"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "get_patient_everything",
+                "description": "Get all FHIR resources associated with a patient by ID.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "pid": {
+                            "type": "string",
+                            "description": "The patient's FHIR ID"
+                        }
+                    },
+                    "required": ["pid"]
+                }
+            }
+        }
+    ]
+    return tools
+
+def use_tools(tool_calls):
+    results = []
+    for call in tool_calls:
+        id = call.id
+        function_name = call.function.name
+        args = json.loads(call.function.arguments)
+
+        # You can add extra logic if needed. 
+        # I wrote this as 'if' statements for readability, but a guardrailed exec() might be OK if you are careful about code injections
+        if function_name == "get_observations":
+            result = get_observations(args["pid"])
+        elif function_name == "get_devices":
+            result = get_devices(args["pid"])
+        elif function_name == "get_patient_everything":
+            result = get_patient_everything(args["pid"])
+        else:
+            result = {"error": f"Unknown function: {function_name}"}
+
+        results.append({
+            "role": "tool",
+            "tool_call_id": id,
+            "content": json.dumps(result)
+        })
+    return results
