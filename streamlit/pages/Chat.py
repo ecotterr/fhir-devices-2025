@@ -64,6 +64,9 @@ def call_chatgpt(prompt, context=""):
     if message.content:
         return message.content.strip()
     if message.tool_calls:
+        for tool_call in message.tool_calls:
+            tool_name = tool_call.function.name
+            st.info(f"Using {tool_name}")
         tool_messages = Utils.use_tools(message.tool_calls)
         messages.extend([message] + tool_messages)
 

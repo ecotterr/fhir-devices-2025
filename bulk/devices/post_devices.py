@@ -2,10 +2,13 @@ import requests
 import json
 import base64
 import demoSettings
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 FHIR_BASE = demoSettings.base_url
 USERNAME = demoSettings.username
 PASSWORD = demoSettings.password
+
+THREAD_COUNT = 12
 
 # Load resources
 with open("C:\SRC\GS2025\Developing on FHIR 2025\\bulk\devices\\fhir_output\devices.json") as f:
@@ -30,5 +33,8 @@ def post_resource(resource):
 
 # Post Devices
 print("Posting Devices...")
-for device in devices:
-    post_resource(device)
+
+with ThreadPoolExecutor(max_workers=THREAD_COUNT) as executor:
+    futures = [executor.submit(post_resource, device) for device in devices]
+    for future in as_completed(futures):
+        pass
