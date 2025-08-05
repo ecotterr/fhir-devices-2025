@@ -1,7 +1,7 @@
 .venv/
 .vscode/
 
-demoSettings.py
+_demoSettings.py
 secrets.toml
 __pycache__
 
